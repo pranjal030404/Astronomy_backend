@@ -104,9 +104,7 @@ const CommunitySchema = new mongoose.Schema({
   toObject: { virtuals: true },
 });
 
-// Indexes
-CommunitySchema.index({ name: 1 });
-CommunitySchema.index({ slug: 1 });
+// Indexes (name and slug already have unique:true which creates indexes)
 CommunitySchema.index({ category: 1 });
 CommunitySchema.index({ members: 1 });
 CommunitySchema.index({ name: 'text', description: 'text' });

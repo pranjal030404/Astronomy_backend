@@ -29,13 +29,10 @@
     "express-validator": "^7.0.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "cloudinary": "^1.41.0",
-    "multer-storage-cloudinary": "^4.0.0",
     "socket.io": "^4.6.0",
     "axios": "^1.6.2",
     "cookie-parser": "^1.4.6",
     "sharp": "^0.33.1",
-    "ioredis": "^5.3.2",
     "nodemailer": "^6.9.7"
   },
   "devDependencies": {

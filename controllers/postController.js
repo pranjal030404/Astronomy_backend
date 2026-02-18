@@ -1,6 +1,13 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
-const { cloudinary } = require('../config/cloudinary');
+
+// Import Community model if it exists
+let Community;
+try {
+  Community = require('../models/Community');
+} catch (err) {
+  console.warn('Community model not found, community features will be disabled');
+}
 
 // @desc    Create a new post
 // @route   POST /api/v1/posts
@@ -17,13 +24,44 @@ exports.createPost = async (req, res, next) => {
       });
     }
 
+    // Validate content is not just whitespace
+    if (content && !content.trim() && (!req.files || req.files.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Post must have meaningful content or at least one image',
+      });
+    }
+
     // Process uploaded images
-    const images = req.files?.map(file => ({
-      url: file.path,
-      publicId: file.filename,
-      width: file.width,
-      height: file.height,
-    })) || [];
+    const images = req.files?.map(file => {
+      console.log('📸 Image uploaded:', file.filename, 'Size:', file.size, 'Path:', file.path);
+      
+      // Local storage - copy to client public folder too for Vite dev server
+      const fs = require('fs');
+      const path = require('path');
+      const clientPublicPath = path.join(__dirname, '../../client/public/uploads', file.filename);
+      
+      try {
+        // Ensure client public uploads directory exists
+        const clientUploadsDir = path.join(__dirname, '../../client/public/uploads');
+        if (!fs.existsSync(clientUploadsDir)) {
+          fs.mkdirSync(clientUploadsDir, { recursive: true });
+        }
+        
+        // Copy file to client public folder
+        fs.copyFileSync(file.path, clientPublicPath);
+        console.log('✅ Copied to client public:', clientPublicPath);
+      } catch (err) {
+        console.error('⚠️  Failed to copy to client public:', err.message);
+      }
+      
+      return {
+        url: `/uploads/${file.filename}`,
+        publicId: file.filename,
+        width: null,
+        height: null,
+      };
+    }) || [];
 
     // Parse astronomyData if it's a string
     let parsedAstronomyData = astronomyData;
@@ -58,7 +96,22 @@ exports.createPost = async (req, res, next) => {
       message: 'Post created successfully',
       data: post,
     });
+    
+    console.log('✅ Post created with', images.length, 'images');
   } catch (error) {
+    // Clean up uploaded files on error
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        // Delete local file
+        const fs = require('fs');
+        const path = require('path');
+        const filePath = path.join(__dirname, '../uploads', file.filename);
+        fs.unlink(filePath, (err) => {
+          if (err) console.error('Error deleting file:', err);
+        });
+      });
+    }
+    
     next(error);
   }
 };
@@ -95,12 +148,20 @@ exports.getPosts = async (req, res, next) => {
 
     const skip = (page - 1) * limit;
 
-    const posts = await Post.find(query)
+    let postsQuery = Post.find(query)
+      .select('author content images likes comments tags visibility community createdAt')
       .populate('author', 'username profilePicture')
-      .populate('community', 'name slug')
       .sort(sort)
       .limit(parseInt(limit))
-      .skip(skip);
+      .skip(skip)
+      .lean();
+    
+    // Only populate community if model exists
+    if (Community) {
+      postsQuery = postsQuery.populate('community', 'name slug');
+    }
+    
+    const posts = await postsQuery;
 
     const total = await Post.countDocuments(query);
 
@@ -122,16 +183,23 @@ exports.getPosts = async (req, res, next) => {
 // @access  Public
 exports.getPost = async (req, res, next) => {
   try {
-    const post = await Post.findById(req.params.id)
+    let postQuery = Post.findById(req.params.id)
       .populate('author', 'username profilePicture bio')
-      .populate('community', 'name slug')
       .populate({
         path: 'comments',
+        options: { limit: 50, sort: { createdAt: -1 } },
         populate: {
           path: 'author',
           select: 'username profilePicture',
         },
       });
+    
+    // Only populate community if model exists
+    if (Community) {
+      postQuery = postQuery.populate('community', 'name slug');
+    }
+    
+    const post = await postQuery;
 
     if (!post) {
       return res.status(404).json({
@@ -163,8 +231,8 @@ exports.updatePost = async (req, res, next) => {
       });
     }
 
-    // Check ownership
-    if (post.author.toString() !== req.user.id) {
+    // Check ownership (or admin)
+    if (post.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this post',
@@ -203,21 +271,36 @@ exports.deletePost = async (req, res, next) => {
       });
     }
 
-    // Check ownership
-    if (post.author.toString() !== req.user.id) {
+    // Check ownership (or admin)
+    if (post.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this post',
       });
     }
 
-    // Delete images from Cloudinary
+    // Delete images from local storage
     if (post.images && post.images.length > 0) {
+      const fs = require('fs');
+      const path = require('path');
+      
       for (const image of post.images) {
         try {
-          await cloudinary.uploader.destroy(image.publicId);
+          // Delete from server/uploads
+          const serverPath = path.join(__dirname, '../uploads/posts', image.publicId);
+          if (fs.existsSync(serverPath)) {
+            fs.unlinkSync(serverPath);
+            console.log('🗑️  Deleted from server:', serverPath);
+          }
+          
+          // Delete from client/public/uploads
+          const clientPath = path.join(__dirname, '../../client/public/uploads', image.publicId);
+          if (fs.existsSync(clientPath)) {
+            fs.unlinkSync(clientPath);
+            console.log('🗑️  Deleted from client:', clientPath);
+          }
         } catch (err) {
-          console.error('Error deleting image from Cloudinary:', err);
+          console.error('Error deleting image:', err);
         }
       }
     }
@@ -323,10 +406,12 @@ exports.getUserPosts = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const posts = await Post.find({ author: req.params.userId })
+      .select('author content images likes comments tags visibility createdAt')
       .populate('author', 'username profilePicture')
       .sort('-createdAt')
       .limit(parseInt(limit))
-      .skip(skip);
+      .skip(skip)
+      .lean();
 
     const total = await Post.countDocuments({ author: req.params.userId });
 

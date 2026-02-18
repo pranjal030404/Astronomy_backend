@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
+const path = require('path');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -15,7 +16,9 @@ const app = express();
 connectDB();
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+})); // Security headers with CORS for images
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true, // Allow cookies
@@ -25,6 +28,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser()); // Cookie parser
 app.use(morgan('dev')); // Logging
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -32,6 +38,8 @@ const postRoutes = require('./routes/posts');
 const commentRoutes = require('./routes/comments');
 const feedRoutes = require('./routes/feed');
 const shopRoutes = require('./routes/shop');
+const statsRoutes = require('./routes/stats');
+const eventsRoutes = require('./routes/events');
 
 // Mount routes
 app.use('/api/v1/auth', authRoutes);
@@ -40,6 +48,8 @@ app.use('/api/v1/posts', postRoutes);
 app.use('/api/v1/comments', commentRoutes);
 app.use('/api/v1/feed', feedRoutes);
 app.use('/api/v1/shop', shopRoutes);
+app.use('/api/v1/stats', statsRoutes);
+app.use('/api/v1/events', eventsRoutes);
 
 // Comment routes for posts (nested)
 const commentController = require('./controllers/commentController');

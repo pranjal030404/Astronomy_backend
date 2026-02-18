@@ -80,8 +80,8 @@ exports.updateComment = async (req, res, next) => {
       });
     }
 
-    // Check ownership
-    if (comment.author.toString() !== req.user.id) {
+    // Check ownership (or admin)
+    if (comment.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this comment',
@@ -117,8 +117,8 @@ exports.deleteComment = async (req, res, next) => {
       });
     }
 
-    // Check ownership
-    if (comment.author.toString() !== req.user.id) {
+    // Check ownership (or admin)
+    if (comment.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this comment',

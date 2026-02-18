@@ -101,17 +101,18 @@ const UserSchema = new mongoose.Schema({
   toObject: { virtuals: true },
 });
 
-// Indexes for performance (removed duplicate indexes as unique:true already creates them)
+// Indexes for performance (unique:true already creates indexes for username and email)
+// Only need additional indexes for fields not marked as unique
 UserSchema.index({ createdAt: -1 });
 
 // Virtual for follower count
 UserSchema.virtual('followerCount').get(function() {
-  return this.followers.length;
+  return this.followers ? this.followers.length : 0;
 });
 
 // Virtual for following count
 UserSchema.virtual('followingCount').get(function() {
-  return this.following.length;
+  return this.following ? this.following.length : 0;
 });
 
 // Virtual for user's posts

@@ -64,6 +64,21 @@ const CelestialEventSchema = new mongoose.Schema({
     default: false,
   },
   recurrencePattern: String,
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: Date,
+  rejectionReason: String,
   createdAt: {
     type: Date,
     default: Date.now,
@@ -72,23 +87,28 @@ const CelestialEventSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Indexes
-CelestialEventSchema.index({ startDate: 1 });
+// Indexes (startDate is already part of composite index below)
 CelestialEventSchema.index({ type: 1 });
 CelestialEventSchema.index({ startDate: 1, endDate: 1 });
 
 // Static method to get upcoming events
-CelestialEventSchema.statics.getUpcoming = function(limit = 10) {
-  return this.find({
+CelestialEventSchema.statics.getUpcoming = function(limit = 10, includePending = false) {
+  const query = {
     startDate: { $gte: new Date() },
-  })
+  };
+  
+  if (!includePending) {
+    query.status = 'approved';
+  }
+  
+  return this.find(query)
     .sort({ startDate: 1 })
     .limit(limit);
 };
 
 // Static method to get events in date range
-CelestialEventSchema.statics.getInRange = function(startDate, endDate) {
-  return this.find({
+CelestialEventSchema.statics.getInRange = function(startDate, endDate, includePending = false) {
+  const query = {
     $or: [
       { startDate: { $gte: startDate, $lte: endDate } },
       { endDate: { $gte: startDate, $lte: endDate } },
@@ -97,7 +117,13 @@ CelestialEventSchema.statics.getInRange = function(startDate, endDate) {
         endDate: { $gte: endDate },
       },
     ],
-  }).sort({ startDate: 1 });
+  };
+  
+  if (!includePending) {
+    query.status = 'approved';
+  }
+  
+  return this.find(query).sort({ startDate: 1 });
 };
 
 module.exports = mongoose.model('CelestialEvent', CelestialEventSchema);

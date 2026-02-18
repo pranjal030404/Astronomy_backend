@@ -9,7 +9,8 @@ exports.getUserProfile = async (req, res, next) => {
     const user = await User.findOne({ username: req.params.username })
       .select('-password')
       .populate('followers', 'username profilePicture')
-      .populate('following', 'username profilePicture');
+      .populate('following', 'username profilePicture')
+      .lean();
 
     if (!user) {
       return res.status(404).json({
@@ -18,13 +19,13 @@ exports.getUserProfile = async (req, res, next) => {
       });
     }
 
-    // Get user's post count
+    // Get user's post count (faster than loading all posts)
     const postCount = await Post.countDocuments({ author: user._id });
 
     res.status(200).json({
       success: true,
       data: {
-        ...user.toObject(),
+        ...user,
         postCount,
       },
     });
@@ -216,6 +217,35 @@ exports.searchUsers = async (req, res, next) => {
   }
 };
 
+// @desc    Get suggested users to follow
+// @route   GET /api/v1/users/suggested
+// @access  Private
+exports.getSuggestedUsers = async (req, res, next) => {
+  try {
+    const { limit = 5 } = req.query;
+    const currentUser = await User.findById(req.user.id).select('following');
+
+    const users = await User.aggregate([
+      {
+        $match: {
+          _id: { $ne: currentUser._id, $nin: currentUser.following },
+        },
+      },
+      { $addFields: { followersCount: { $size: '$followers' } } },
+      { $sort: { followersCount: -1 } },
+      { $limit: parseInt(limit) },
+      { $project: { username: 1, profilePicture: 1, bio: 1, followersCount: 1 } },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Update profile picture
 // @route   PUT /api/v1/users/profile-picture
 // @access  Private
@@ -228,9 +258,25 @@ exports.updateProfilePicture = async (req, res, next) => {
       });
     }
 
+    // Copy image to client public folder
+    const fs = require('fs');
+    const path = require('path');
+    const clientPublicPath = path.join(__dirname, '../../client/public/uploads', req.file.filename);
+    
+    try {
+      const clientUploadsDir = path.join(__dirname, '../../client/public/uploads');
+      if (!fs.existsSync(clientUploadsDir)) {
+        fs.mkdirSync(clientUploadsDir, { recursive: true });
+      }
+      fs.copyFileSync(req.file.path, clientPublicPath);
+      console.log('✅ Copied profile picture to client public:', clientPublicPath);
+    } catch (err) {
+      console.error('⚠️  Failed to copy to client public:', err.message);
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      { profilePicture: req.file.path },
+      { profilePicture: `/uploads/${req.file.filename}` },
       { new: true, runValidators: true }
     ).select('-password');
 
@@ -238,6 +284,83 @@ exports.updateProfilePicture = async (req, res, next) => {
       success: true,
       message: 'Profile picture updated successfully',
       data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all users (Admin only)
+// @route   GET /api/v1/users/all
+// @access  Private/Admin
+exports.getAllUsers = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const users = await User.find({})
+      .select('username email role createdAt isVerified profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+
+    const total = await User.countDocuments({});
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: users,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete user (Admin only)
+// @route   DELETE /api/v1/users/:userId
+// @access  Private/Admin
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Don't allow admin to delete themselves
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own account',
+      });
+    }
+
+    // Delete all posts by this user
+    await Post.deleteMany({ author: user._id });
+
+    // Remove user from followers/following of other users
+    await User.updateMany(
+      { followers: user._id },
+      { $pull: { followers: user._id } }
+    );
+    await User.updateMany(
+      { following: user._id },
+      { $pull: { following: user._id } }
+    );
+
+    // Delete the user
+    await user.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'User deleted successfully',
     });
   } catch (error) {
     next(error);

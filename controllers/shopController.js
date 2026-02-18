@@ -73,7 +73,23 @@ exports.createShopItem = async (req, res, next) => {
     
     // Handle image upload
     if (req.file) {
-      req.body.image = req.file.path;
+      // Copy image to client public folder
+      const fs = require('fs');
+      const path = require('path');
+      const clientPublicPath = path.join(__dirname, '../../client/public/uploads', req.file.filename);
+      
+      try {
+        const clientUploadsDir = path.join(__dirname, '../../client/public/uploads');
+        if (!fs.existsSync(clientUploadsDir)) {
+          fs.mkdirSync(clientUploadsDir, { recursive: true });
+        }
+        fs.copyFileSync(req.file.path, clientPublicPath);
+        console.log('✅ Copied shop item image to client public:', clientPublicPath);
+      } catch (err) {
+        console.error('⚠️  Failed to copy to client public:', err.message);
+      }
+      
+      req.body.image = `/uploads/${req.file.filename}`;
       req.body.imagePublicId = req.file.filename;
     }
     
@@ -105,13 +121,43 @@ exports.updateShopItem = async (req, res, next) => {
     
     // Handle new image upload
     if (req.file) {
-      // Delete old image from Cloudinary
+      // Delete old image from local storage
       if (item.imagePublicId) {
-        const cloudinary = require('../config/cloudinary').cloudinary;
-        await cloudinary.uploader.destroy(item.imagePublicId);
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Delete from server/uploads
+        const serverPath = path.join(__dirname, '../uploads/shop', item.imagePublicId);
+        if (fs.existsSync(serverPath)) {
+          fs.unlinkSync(serverPath);
+          console.log('🗑️  Deleted old image from server:', serverPath);
+        }
+        
+        // Delete from client/public/uploads
+        const clientPath = path.join(__dirname, '../../client/public/uploads', item.imagePublicId);
+        if (fs.existsSync(clientPath)) {
+          fs.unlinkSync(clientPath);
+          console.log('🗑️  Deleted old image from client:', clientPath);
+        }
       }
       
-      req.body.image = req.file.path;
+      // Copy new image to client public folder
+      const fs = require('fs');
+      const path = require('path');
+      const clientPublicPath = path.join(__dirname, '../../client/public/uploads', req.file.filename);
+      
+      try {
+        const clientUploadsDir = path.join(__dirname, '../../client/public/uploads');
+        if (!fs.existsSync(clientUploadsDir)) {
+          fs.mkdirSync(clientUploadsDir, { recursive: true });
+        }
+        fs.copyFileSync(req.file.path, clientPublicPath);
+        console.log('✅ Copied new image to client public:', clientPublicPath);
+      } catch (err) {
+        console.error('⚠️  Failed to copy to client public:', err.message);
+      }
+      
+      req.body.image = `/uploads/${req.file.filename}`;
       req.body.imagePublicId = req.file.filename;
     }
     
@@ -144,10 +190,24 @@ exports.deleteShopItem = async (req, res, next) => {
       });
     }
     
-    // Delete from Cloudinary if image exists
+    // Delete from local storage if image exists
     if (item.imagePublicId) {
-      const cloudinary = require('../config/cloudinary').cloudinary;
-      await cloudinary.uploader.destroy(item.imagePublicId);
+      const fs = require('fs');
+      const path = require('path');
+      
+      // Delete from server/uploads
+      const serverPath = path.join(__dirname, '../uploads/shop', item.imagePublicId);
+      if (fs.existsSync(serverPath)) {
+        fs.unlinkSync(serverPath);
+        console.log('🗑️  Deleted from server:', serverPath);
+      }
+      
+      // Delete from client/public/uploads
+      const clientPath = path.join(__dirname, '../../client/public/uploads', item.imagePublicId);
+      if (fs.existsSync(clientPath)) {
+        fs.unlinkSync(clientPath);
+        console.log('🗑️  Deleted from client:', clientPath);
+      }
     }
     
     await item.deleteOne();

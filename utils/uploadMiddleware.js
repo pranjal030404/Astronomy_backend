@@ -71,6 +71,7 @@ exports.handleMulterError = (err, req, res, next) => {
   }
   
   if (err) {
+    console.error('Upload Error:', err);
     return res.status(400).json({
       success: false,
       message: err.message || 'Error uploading file.',

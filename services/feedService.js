@@ -1,6 +1,14 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 
+// Import Community model if it exists
+let Community;
+try {
+  Community = require('../models/Community');
+} catch (err) {
+  console.warn('Community model not found in feedService');
+}
+
 // Generate personalized feed for a user
 exports.generateFeed = async (userId, options = {}) => {
   try {
@@ -39,35 +47,21 @@ exports.generateFeed = async (userId, options = {}) => {
 
     // Get posts with try-catch for populate
     let posts = [];
-    try {
-      posts = await Post.find(query)
-        .populate({
-          path: 'author',
-          select: 'username profilePicture',
-          options: { strictPopulate: false }
-        })
-        .populate({
-          path: 'community',
-          select: 'name slug',
-          options: { strictPopulate: false }
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean();
-    } catch (populateError) {
-      console.error('Populate error, trying without community:', populateError.message);
-      // Try without community populate if it fails
-      posts = await Post.find(query)
-        .populate({
-          path: 'author',
-          select: 'username profilePicture'
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean();
+    
+    let postsQuery = Post.find(query)
+      .select('author content images likes comments tags visibility community createdAt')
+      .populate('author', 'username profilePicture')
+      .sort('-createdAt')
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+    
+    // Only populate community if model exists
+    if (Community) {
+      postsQuery = postsQuery.populate('community', 'name slug');
     }
+    
+    posts = await postsQuery;
 
     // Count total for pagination
     const total = await Post.countDocuments(query);

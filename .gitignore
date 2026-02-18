@@ -36,6 +36,7 @@ Thumbs.db
 *~
 
 # Uploads
+uploads/
 server/uploads/
 server/temp/
 
