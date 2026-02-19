@@ -15,18 +15,31 @@ const app = express();
 // Connect to database
 connectDB();
 
+const isProd = process.env.NODE_ENV === 'production';
+
 // Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 })); // Security headers with CORS for images
+
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5000',
+  'http://localhost:3000',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true, // Allow cookies
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, same-origin)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
 }));
 app.use(express.json({ limit: '10mb' })); // Body parser
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser()); // Cookie parser
-app.use(morgan('dev')); // Logging
+app.use(morgan(isProd ? 'combined' : 'dev')); // Logging
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -66,35 +79,49 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
-// Welcome route
-app.get('/', (req, res) => {
-  res.json({
-    message: '🌌 Welcome to Astronomy Lover API',
-    version: '1.0.0',
-    endpoints: {
-      health: '/api/v1/health',
-      auth: '/api/v1/auth',
-    },
+// Welcome route (dev only — production serves the React app from '/')
+if (!isProd) {
+  app.get('/', (req, res) => {
+    res.json({
+      message: '🌌 Welcome to Astronomy Lover API',
+      version: '1.0.0',
+      endpoints: {
+        health: '/api/v1/health',
+        auth: '/api/v1/auth',
+      },
+    });
   });
-});
+}
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
+// Serve React production build in production mode
+if (isProd) {
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientBuildPath));
+  // SPA catch-all: send index.html for any non-API route
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
-});
+} else {
+  // 404 handler for dev (API-only)
+  app.use((req, res) => {
+    res.status(404).json({
+      success: false,
+      message: 'Route not found',
+    });
+  });
+}
 
 // Error handler middleware (must be last)
 app.use(errorHandler);
 
-// Start server
+// Start server — bind to 0.0.0.0 so it's reachable on the network
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
+const HOST = '0.0.0.0';
+const server = app.listen(PORT, HOST, () => {
+  const displayHost = process.env.CLIENT_URL || `http://localhost:${PORT}`;
   console.log(`\n🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}/api/v1`);
-  console.log(`🌐 Health: http://localhost:${PORT}/api/v1/health\n`);
+  console.log(`📍 API: ${displayHost}/api/v1`);
+  console.log(`🌐 Health: ${displayHost}/api/v1/health\n`);
 });
 
 // Handle unhandled promise rejections
