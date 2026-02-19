@@ -1,4 +1,7 @@
-require('dotenv').config();
+// Load environment-specific .env file (.env.production in prod, .env otherwise)
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path: envFile });
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -24,15 +27,22 @@ app.use(helmet({
 
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  process.env.CLIENT_URL_LAN,
   'http://localhost:5000',
   'http://localhost:3000',
+  'http://localhost:5173',
+  // LAN access from other devices on the same network
+  'http://192.168.1.21:3000',
+  'http://192.168.1.21:5173',
+  'http://192.168.1.21:5000',
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, same-origin)
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    // Return a proper 403 — not an Error — so Express doesn't treat it as a 500
+    callback(null, false);
   },
   credentials: true,
 }));

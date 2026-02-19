@@ -4,12 +4,14 @@
   "description": "Backend API for Astronomy Lover social platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development nodemon server.js",
     "test": "jest --watchAll --verbose",
     "seed": "node seeder",
     "seed:fresh": "node seeder --fresh",
-    "seed:destroy": "node seeder --destroy"
+    "seed:destroy": "node seeder --destroy",
+    "clear:fake": "node scripts/clearSeededData.js",
+    "clear:fake:confirm": "node scripts/clearSeededData.js --confirm"
   },
   "keywords": [
     "express",
