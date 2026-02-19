@@ -20,7 +20,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 })); // Security headers with CORS for images
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
   credentials: true, // Allow cookies
 }));
 app.use(express.json({ limit: '10mb' })); // Body parser
