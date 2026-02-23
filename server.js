@@ -63,6 +63,7 @@ const feedRoutes = require('./routes/feed');
 const shopRoutes = require('./routes/shop');
 const statsRoutes = require('./routes/stats');
 const eventsRoutes = require('./routes/events');
+const notificationRoutes = require('./routes/notifications');
 
 // Mount routes
 app.use('/api/v1/auth', authRoutes);
@@ -73,6 +74,7 @@ app.use('/api/v1/feed', feedRoutes);
 app.use('/api/v1/shop', shopRoutes);
 app.use('/api/v1/stats', statsRoutes);
 app.use('/api/v1/events', eventsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 // Comment routes for posts (nested)
 const commentController = require('./controllers/commentController');

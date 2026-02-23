@@ -10,6 +10,7 @@ const {
   refreshToken,
   updateDetails,
   updatePassword,
+  checkUsername,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -58,6 +59,7 @@ const loginValidation = [
 ];
 
 // Public routes
+router.get('/check-username', checkUsername);
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/login', loginLimiter, loginValidation, login);
 router.post('/refresh-token', refreshToken);

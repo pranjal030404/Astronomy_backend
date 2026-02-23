@@ -1,6 +1,22 @@
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 
+// @desc    Check if username is available
+// @route   GET /api/v1/auth/check-username
+// @access  Public
+exports.checkUsername = async (req, res, next) => {
+  try {
+    const { username } = req.query;
+    if (!username || username.trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Username too short' });
+    }
+    const exists = await User.findOne({ username: username.trim().toLowerCase() }).select('_id').lean();
+    res.status(200).json({ success: true, available: !exists });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public

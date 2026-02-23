@@ -1,5 +1,6 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 // Import Community model if it exists
 let Community;
@@ -392,6 +393,57 @@ exports.unlikePost = async (req, res, next) => {
         liked: false,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Share a post with another user (sends in-app notification)
+// @route   POST /api/v1/posts/:id/share
+// @access  Private
+exports.sharePost = async (req, res, next) => {
+  try {
+    const { recipientUsername } = req.body;
+
+    if (!recipientUsername) {
+      return res.status(400).json({ success: false, message: 'Recipient username is required' });
+    }
+
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const recipient = await User.findOne({ username: recipientUsername.trim() });
+    if (!recipient) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (recipient._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot share a post with yourself' });
+    }
+
+    // Avoid duplicate share notifications within 60 seconds
+    const recentShare = await Notification.findOne({
+      recipient: recipient._id,
+      sender: req.user._id,
+      post: post._id,
+      type: 'share_post',
+      createdAt: { $gte: new Date(Date.now() - 60 * 1000) },
+    });
+
+    if (recentShare) {
+      return res.status(400).json({ success: false, message: 'You already shared this post with that user recently' });
+    }
+
+    await Notification.create({
+      recipient: recipient._id,
+      sender: req.user._id,
+      type: 'share_post',
+      post: post._id,
+    });
+
+    res.status(200).json({ success: true, message: `Post shared with ${recipient.username}` });
   } catch (error) {
     next(error);
   }

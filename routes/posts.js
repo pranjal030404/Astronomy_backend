@@ -9,6 +9,7 @@ const {
   likePost,
   unlikePost,
   getUserPosts,
+  sharePost,
 } = require('../controllers/postController');
 const { protect, optionalAuth } = require('../middleware/auth');
 const { uploadPostImages, handleMulterError } = require('../utils/uploadMiddleware');
@@ -24,5 +25,6 @@ router.put('/:id', protect, updatePost);
 router.delete('/:id', protect, deletePost);
 router.post('/:id/like', protect, likePost);
 router.delete('/:id/like', protect, unlikePost);
+router.post('/:id/share', protect, sharePost);
 
 module.exports = router;
